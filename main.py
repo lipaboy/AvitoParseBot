@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 from selenium import webdriver
 import time
+from webdriver_manager.firefox import GeckoDriverManager
 # from selenium.webdriver.chrome.service import Service
 import re
 import csv
@@ -76,9 +77,9 @@ def getPageContent(html):
                     + block.find('div', class_=re.compile('iva-item-title'))
                 .find('a', href=True)['href'].replace(u'\xa0', u' '),
                 )
-            if any(x in apart.geo for x in ['Линей', 'Кропотк', 'Галуща',
-                                            'Балаки', 'Красный', 'Дуси', 'Нарым']):
-                apartmentsList.add(apart)
+            # if any(x in apart.geo for x in ['Линей', 'Кропотк', 'Галуща',
+            #                                 'Балаки', 'Красный', 'Дуси', 'Нарым']):
+            apartmentsList.add(apart)
         except Exception as ex:
             print(f'Не предвиденная ошибка: {ex}')
     return apartmentsList
@@ -103,6 +104,9 @@ def parseUrlBySelenium(url: str):
         # укажите путь до драйвера
         # service = Service(executable_path="chromedriver")
         service = webdriver.FirefoxService()
+        service = webdriver.FirefoxService(executable_path="geckodriver.exe")
+        # service = webdriver.FirefoxService(executable_path="C:/Users/prince/geckodriver.exe")
+        # service = webdriver.FirefoxService(executable_path=GeckoDriverManager().install())
         # browser = webdriver.Chrome(service=service, options=options)
         browser = webdriver.Firefox(service=service, options=options)
         browser.get(url)
@@ -111,7 +115,7 @@ def parseUrlBySelenium(url: str):
         pages = getPagesCount(html)  #определяем количество страниц выдачи
         print(f'Парсинг страницы {1} завершен. Собрано {len(apartments)} позиций')
         # for page in range(2, 2 + 1):
-        for page in range(2, pages + 1):
+        for page in range(2, min(pages, 7) + 1):
             link = url + f'&p={page}'
             browser.get(link)
             time.sleep(1)
@@ -133,7 +137,7 @@ def getDiffFromDB(hotAvitoApartments: set):
     fieldnames = ['name', 'price', 'geo', 'url']
 
     apartmentsDB = set()
-    with open("apartments.csv", encoding='utf-8') as r_file:
+    with open("cats.csv", encoding='utf-8') as r_file:
         file_reader = csv.DictReader(r_file, delimiter=",", fieldnames=fieldnames)
         count = 0
         for row in file_reader:
@@ -148,7 +152,7 @@ def getDiffFromDB(hotAvitoApartments: set):
 
 def saveToDB(apartNew: set):
     fieldnames = ['name', 'price', 'geo', 'url']
-    with open("apartments.csv", mode="a", encoding='utf-8') as w_file:
+    with open("cats.csv", mode="a", encoding='utf-8') as w_file:
         file_writer = csv.DictWriter(w_file, delimiter=",", lineterminator="\n", fieldnames=fieldnames)
         # file_writer.writerow(["name", "geo", "url"])
         # file_writer.writeheader()
@@ -160,7 +164,8 @@ def saveToDB(apartNew: set):
 
 
 def getNewRooms():
-    avitoUrl = 'https://www.avito.ru/novosibirsk/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?district=805'
+    # avitoUrl = 'https://www.avito.ru/novosibirsk/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?district=805'
+    avitoUrl = 'https://www.avito.ru/novosibirsk/koshki?cd=1&q=котята&s=1'
     print('Запуск парсера...')
     apartmentsAvito = parseUrlBySelenium(avitoUrl)
     apartNew = getDiffFromDB(apartmentsAvito)
@@ -194,9 +199,11 @@ if __name__ == "__main__":
     while True:
         aparts = getNewRooms()
         for ap in aparts:
-            # bot.send_message(-4000312952, str(ap))    # group of Apartments
-            bot.send_message(460621273, str(ap))    # me
+            bot.send_message(-4000312952, str(ap))    # group of Apartments
+            time.sleep(1)
+            # bot.send_message(460621273, str(ap))    # me
         time.sleep(60 * 30)     # every half hour
+        break
 
     # bot.polling(none_stop=True, interval=0)
 

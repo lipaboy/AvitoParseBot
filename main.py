@@ -1,3 +1,4 @@
+import sys
 from bs4 import BeautifulSoup
 from selenium import webdriver
 import time
@@ -7,6 +8,8 @@ import re
 import csv
 import telebot
 
+GROUP_ID = -4000312952
+DB_NAME = "cars.csv"
 
 """
 Парсер торговой площидки Avito, с помощью Selenium
@@ -17,24 +20,21 @@ import telebot
 """
 
 
-def getPagesCount(html):
-    """определяем количеоств страниц выдачи"""
+def getNextPageUrl(html) -> str:
     soup = BeautifulSoup(html, 'html.parser')
 
-    # todo: бага, может не быть страниц в целом
-    pages = 1
-    kek = soup.find('div', class_=re.compile('pagination-pagination'))
+    kek = soup.find('div', { 'data-ftid' : "component_pagination" })
     if kek is not None:
-        lol = kek.find_all('span', class_=re.compile('styles-module-text'))
-        if lol is not None and len(lol) > 1:
-            pages = lol[-1].text
-    # pages = \
+        lol = kek.find('a', { 'data-ftid' : "component_pagination-item-next" })
+        if lol is not None:
+            href = lol['href']
+            if 'all/page' in href:
+                return href
 
-    print(f'Найдено страниц выдачи: {pages}')
-    return int(pages)
+    return ''
 
 
-class ApartItem(object):
+class GoodItem(object):
     def __init__(self, name, price, geo, url):
         self.name = name
         self.price = price
@@ -45,7 +45,7 @@ class ApartItem(object):
         return "%s\n%s\n%s\n%s" % (self.price, self.name, self.geo, self.url)
 
     def __eq__(self, other):
-        if isinstance(other, ApartItem):
+        if isinstance(other, GoodItem):
             return self.url == other.url
         else:
             return False
@@ -58,39 +58,33 @@ class ApartItem(object):
 
 
 """Функция сбора данных"""
-def getPageContent(html):
+def getPageContent(html) -> set[GoodItem]:
     soup = BeautifulSoup(html, 'html.parser')
-    # pages = soup.find('div', class_=re.compile('items-items')).find_all(attrs={'data-marker': "item"})[-2].text
-    blocks = soup.find_all('div', class_=re.compile('iva-item-content'))
+     #.find('div', class_=re.compile('css-1173kvb')) \
+    blockSet = soup.find_all('div', { 'data-ftid' : "bulls-list_bull" })
     # сбор данных с страницы
-    apartmentsList = set()
-    for block in blocks:
+    goodsSet = set()
+    # print(f"blocks: {len(blockSet)}")
+    for block in blockSet:
         try:
-            apart = ApartItem(
-                name=block.find('div', class_=re.compile('iva-item-title'))
-                .find('h3').get_text(strip=True, separator=', ').replace(u'\xa0', u' '),
-                price=block.find('div', class_=re.compile('iva-item-price'))
-                .find(attrs={'itemprop': 'price'})['content'],
-                geo=block.find('div', class_=re.compile('geo-root'))
-                .get_text(strip=True, separator=', ').replace(u'\xa0', u' '),
-                url='https://www.avito.ru'
-                    + block.find('div', class_=re.compile('iva-item-title'))
-                .find('a', href=True)['href'].replace(u'\xa0', u' '),
+            # .find('div', class_=re.compile('css-jlnpz8'))
+            price = block.find('span', { 'data-ftid' : "bull_price" }).get_text(strip=True, ).replace(u'\xa0', u' ')
+            price = int(int(str(price).replace(' ', '')) / 1000)
+            item = GoodItem(
+                name=block.find('h3').get_text(strip=True, separator=', ').replace(u'\xa0', u' '),
+                price=price,
+                geo='',
+                url=block.find('a', { 'data-ftid' : "bull_title" })['href']
                 )
-            # if any(x in apart.geo for x in ['Линей', 'Кропотк', 'Галуща',
-            #                                 'Балаки', 'Красный', 'Дуси', 'Нарым']):
-
-            if apart.price.isnumeric() and int(apart.price) <= 500 \
-        	or any(x in apart.price for x in ['бесплат', 'дар', 'хорош', 'добры', 'меньше']) \
-        	and none(x == apart.name.split(' ')[0].lower() for x in ['кошка', 'кот', 'кошки']):
-            	apartmentsList.add(apart)
+            
+            goodsSet.add(item)
         except Exception as ex:
             print(f'Не предвиденная ошибка: {ex}')
-    return apartmentsList
+    return goodsSet
 
 
 """Основная функция, сам парсер"""
-def parseUrlBySelenium(url: str):
+def parseUrlBySelenium(url: str) -> set[GoodItem]:
     profile = webdriver.FirefoxProfile()
     profile.set_preference("browser.cache.disk.enable", False)
     profile.set_preference("browser.cache.memory.enable", False)
@@ -112,21 +106,28 @@ def parseUrlBySelenium(url: str):
     # service = webdriver.FirefoxService(executable_path=GeckoDriverManager().install())
     # browser = webdriver.Chrome(service=service, options=options)
     browser = webdriver.Firefox(service=service, options=options)
-    browser.get(url)
     try:
-        html = browser.page_source
-        apartments = getPageContent(html)
-        pages = getPagesCount(html)  #определяем количество страниц выдачи
-        print(f'Парсинг страницы {1} завершен. Собрано {len(apartments)} позиций')
-        # for page in range(2, 2 + 1):
-        for page in range(2, pages + 1):
-            link = url + f'&p={page}'
+        goods = set[GoodItem]()
+        pageNextUrl = ''
+        page = 1
+        link = url
+        while True:
             browser.get(link)
-            time.sleep(1)
             html = browser.page_source
-            newAparts = getPageContent(html)
-            print(f'Парсинг страницы {page} завершен. Собрано {len(newAparts)} позиций')
-            apartments = apartments.union(newAparts)
+            goodsOnPage = getPageContent(html)
+            pageNextUrl = getNextPageUrl(html)
+            pos = pageNextUrl.find("all")
+            # print(pageNextUrl[pos:pos+20])
+            print(f'Парсинг страницы {page} завершен. Собрано {len(goodsOnPage)} позиций')
+            goods = goods.union(goodsOnPage)
+
+            if pageNextUrl == '':
+                break
+
+            link = pageNextUrl            
+            time.sleep(1)
+            page += 1
+
     except Exception as ex:     # exception - исключение
         print(f'Не предвиденная ошибка: {ex}')
     finally:
@@ -134,29 +135,29 @@ def parseUrlBySelenium(url: str):
         browser.quit()
 
     print('Сбор данных завершен.')
-    return apartments
+    return goods
 
 
-def getDiffFromDB(hotAvitoApartments: set):
+def getDiffFromDB(hotGoods: set[GoodItem]) -> set[GoodItem]:
     fieldnames = ['name', 'price', 'geo', 'url']
 
-    apartmentsDB = set()
-    with open("cats.csv", encoding='utf-8') as r_file:
+    goodsDB = set()
+    with open(DB_NAME, encoding='utf-8') as r_file:
         file_reader = csv.DictReader(r_file, delimiter=",", fieldnames=fieldnames)
         count = 0
         for row in file_reader:
             if count == 0:  # первая строка название полей
                 count += 1
                 continue
-            apartmentsDB.add(ApartItem(name=row['name'], price=row['price'],
+            goodsDB.add(GoodItem(name=row['name'], price=row['price'],
                                        geo=row['geo'], url=row['url']))
 
-    return hotAvitoApartments - apartmentsDB
+    return hotGoods - goodsDB
 
 
 def saveToDB(apartNew: set):
     fieldnames = ['name', 'price', 'geo', 'url']
-    with open("cats.csv", mode="a", encoding='utf-8') as w_file:
+    with open(DB_NAME, mode="a", encoding='utf-8') as w_file:
         file_writer = csv.DictWriter(w_file, delimiter=",", lineterminator="\n", fieldnames=fieldnames)
         # file_writer.writerow(["name", "geo", "url"])
         # file_writer.writeheader()
@@ -165,21 +166,23 @@ def saveToDB(apartNew: set):
                                   'price': ap.price,
                                   'geo': ap.geo,
                                   'url': ap.url})
+    print('Save to DB successful')
 
 
 def getNewRooms():
     # avitoUrl = 'https://www.avito.ru/novosibirsk/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?district=805'
-    avitoUrl = 'https://www.avito.ru/novosibirsk/koshki?cd=1&q=котята&s=1'
+    # avitoUrl = 'https://www.avito.ru/novosibirsk/koshki?cd=1&q=котята&s=1'
+    url = "https://novosibirsk.drom.ru/auto/all/?frametype[]=10&frametype[]=5&frametype[]=9&frametype[]=7&distance=100&maxprice=1000000&transmission[]=2&transmission[]=3&transmission[]=4&transmission[]=5&transmission[]=-1&mv=1.0&unsold=1&maxprobeg=150000&isOwnerSells=1"
     print('Запуск парсера...')
-    apartmentsAvito = parseUrlBySelenium(avitoUrl)
-    apartNew = getDiffFromDB(apartmentsAvito)
+    goodsAll = parseUrlBySelenium(url)
+    goodsNew = getDiffFromDB(goodsAll)
 
-    for ap in apartNew:
-        print(ap)
+    for good in goodsNew:
+        print(good)
 
-    saveToDB(apartNew)
+    saveToDB(goodsNew)
 
-    return apartNew
+    return goodsNew
 
 
 def get_text_messages(message):
@@ -200,15 +203,22 @@ if __name__ == "__main__":
     bot = telebot.TeleBot(tokenStr)
     bot.register_message_handler(get_text_messages, content_types=['text'])
 
+    # bot.polling(none_stop=True, interval=0)
+    bot.send_message(-4000312952, 'hi')
+    sys.exit(0)
+
     while True:
-        aparts = getNewRooms()
-        for ap in aparts:
-            bot.send_message(-4000312952, str(ap))    # group of Apartments
+        goods = getNewRooms()
+        for g in goods:
+            bot.send_message(GROUP_ID, str(g))    # group of search elements
             time.sleep(1)
             # bot.send_message(460621273, str(ap))    # me
-        time.sleep(60 * 30)     # every half hour
+        print('ждёмс')
+        for i in range(3):
+            time.sleep(60 * 10)     # every half hour
+            print(f"{i + 1}0 minutes left...")
         
 
-    # bot.polling(none_stop=True, interval=0)
+    
 
 

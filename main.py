@@ -69,8 +69,8 @@ def getPageContent(html):
             apart = ApartItem(
                 name=block.find('div', class_=re.compile('iva-item-title'))
                 .find('h3').get_text(strip=True, separator=', ').replace(u'\xa0', u' '),
-                price=int(block.find('div', class_=re.compile('iva-item-price'))
-                .find(attrs={'itemprop': 'price'})['content']),
+                price=block.find('div', class_=re.compile('iva-item-price'))
+                .find(attrs={'itemprop': 'price'})['content'],
                 geo=block.find('div', class_=re.compile('geo-root'))
                 .get_text(strip=True, separator=', ').replace(u'\xa0', u' '),
                 url='https://www.avito.ru'
@@ -79,7 +79,11 @@ def getPageContent(html):
                 )
             # if any(x in apart.geo for x in ['Линей', 'Кропотк', 'Галуща',
             #                                 'Балаки', 'Красный', 'Дуси', 'Нарым']):
-            apartmentsList.add(apart)
+
+            if apart.price.isnumeric() and int(apart.price) <= 500 \
+        	or any(x in apart.price for x in ['бесплат', 'дар', 'хорош', 'добры', 'меньше']) \
+        	and none(x == apart.name.split(' ')[0].lower() for x in ['кошка', 'кот', 'кошки']):
+            	apartmentsList.add(apart)
         except Exception as ex:
             print(f'Не предвиденная ошибка: {ex}')
     return apartmentsList
@@ -100,22 +104,22 @@ def parseUrlBySelenium(url: str):
     options.add_argument('--log-level=3')
     options.add_argument("--headless")  #режим без запуска браузера
 
+    # укажите путь до драйвера
+    # service = Service(executable_path="chromedriver")
+    service = webdriver.FirefoxService()
+    # service = webdriver.FirefoxService(executable_path="geckodriver.exe")
+    # service = webdriver.FirefoxService(executable_path="C:/Users/prince/geckodriver.exe")
+    # service = webdriver.FirefoxService(executable_path=GeckoDriverManager().install())
+    # browser = webdriver.Chrome(service=service, options=options)
+    browser = webdriver.Firefox(service=service, options=options)
+    browser.get(url)
     try:
-        # укажите путь до драйвера
-        # service = Service(executable_path="chromedriver")
-        service = webdriver.FirefoxService()
-        service = webdriver.FirefoxService(executable_path="geckodriver.exe")
-        # service = webdriver.FirefoxService(executable_path="C:/Users/prince/geckodriver.exe")
-        # service = webdriver.FirefoxService(executable_path=GeckoDriverManager().install())
-        # browser = webdriver.Chrome(service=service, options=options)
-        browser = webdriver.Firefox(service=service, options=options)
-        browser.get(url)
         html = browser.page_source
         apartments = getPageContent(html)
         pages = getPagesCount(html)  #определяем количество страниц выдачи
         print(f'Парсинг страницы {1} завершен. Собрано {len(apartments)} позиций')
         # for page in range(2, 2 + 1):
-        for page in range(2, min(pages, 7) + 1):
+        for page in range(2, pages + 1):
             link = url + f'&p={page}'
             browser.get(link)
             time.sleep(1)
@@ -203,7 +207,7 @@ if __name__ == "__main__":
             time.sleep(1)
             # bot.send_message(460621273, str(ap))    # me
         time.sleep(60 * 30)     # every half hour
-        break
+        
 
     # bot.polling(none_stop=True, interval=0)
 

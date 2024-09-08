@@ -3,12 +3,11 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 import time
 from webdriver_manager.firefox import GeckoDriverManager
-# from selenium.webdriver.chrome.service import Service
 import re
 import csv
 import telebot
 
-GROUP_ID = -4000312952
+GROUP_ID = -1002332236765
 DB_NAME = "cars.csv"
 
 """
@@ -42,7 +41,7 @@ class GoodItem(object):
         self.url = url
 
     def __repr__(self):
-        return "%s\n%s\n%s\n%s" % (self.price, self.name, self.geo, self.url)
+        return "%se3\n%s\n%s\n%s" % (self.price, self.name, self.geo, self.url)
 
     def __eq__(self, other):
         if isinstance(other, GoodItem):
@@ -158,7 +157,10 @@ def getDiffFromDB(hotGoods: set[GoodItem]) -> set[GoodItem]:
 def saveToDB(apartNew: set):
     fieldnames = ['name', 'price', 'geo', 'url']
     with open(DB_NAME, mode="a", encoding='utf-8') as w_file:
-        file_writer = csv.DictWriter(w_file, delimiter=",", lineterminator="\n", fieldnames=fieldnames)
+        file_writer = csv.DictWriter(w_file, 
+                                     delimiter=",", 
+                                     lineterminator="\n", 
+                                     fieldnames=fieldnames)
         # file_writer.writerow(["name", "geo", "url"])
         # file_writer.writeheader()
         for ap in apartNew:
@@ -169,7 +171,7 @@ def saveToDB(apartNew: set):
     print('Save to DB successful')
 
 
-def getNewRooms():
+def getNewGoods():
     # avitoUrl = 'https://www.avito.ru/novosibirsk/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?district=805'
     # avitoUrl = 'https://www.avito.ru/novosibirsk/koshki?cd=1&q=котята&s=1'
     url = "https://novosibirsk.drom.ru/auto/all/?frametype[]=10&frametype[]=5&frametype[]=9&frametype[]=7&distance=100&maxprice=1000000&transmission[]=2&transmission[]=3&transmission[]=4&transmission[]=5&transmission[]=-1&mv=1.0&unsold=1&maxprobeg=150000&isOwnerSells=1"
@@ -182,6 +184,7 @@ def getNewRooms():
 
     saveToDB(goodsNew)
 
+    # sys.exit(0)
     return goodsNew
 
 
@@ -189,7 +192,7 @@ def get_text_messages(message):
 
     # aparts = getNewRooms()
     # for ap in aparts:
-    #     bot.send_message(message.from_user.id, str(ap))
+    bot.send_message(message.from_user.id, str(message.chat.id))
 
     print(message.chat.id)
 
@@ -203,12 +206,12 @@ if __name__ == "__main__":
     bot = telebot.TeleBot(tokenStr)
     bot.register_message_handler(get_text_messages, content_types=['text'])
 
+    # bot.send_message(GROUP_ID, 'hi')
     # bot.polling(none_stop=True, interval=0)
-    bot.send_message(-4000312952, 'hi')
-    sys.exit(0)
+    # sys.exit(0)
 
     while True:
-        goods = getNewRooms()
+        goods = getNewGoods()
         for g in goods:
             bot.send_message(GROUP_ID, str(g))    # group of search elements
             time.sleep(1)
@@ -217,8 +220,3 @@ if __name__ == "__main__":
         for i in range(3):
             time.sleep(60 * 10)     # every half hour
             print(f"{i + 1}0 minutes left...")
-        
-
-    
-
-
